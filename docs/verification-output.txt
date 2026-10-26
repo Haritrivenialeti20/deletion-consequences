@@ -1,0 +1,3 @@
+customer 1 delete: rejected by RESTRICT
+customer 2 delete: accepted because it has no orders
+order 101 delete: accepted; its 2 items removed by CASCADE

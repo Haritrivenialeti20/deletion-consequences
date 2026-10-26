@@ -1,0 +1,46 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Deletion Consequences</title>
+<style>
+*{box-sizing:border-box} body{margin:0;background:#e9eef0;color:#17222b;font-family:Arial,Helvetica,sans-serif}.page{width:794px;min-height:1123px;margin:0 auto 24px;padding:58px 62px;background:#fff;position:relative;overflow:hidden}.kicker{font-size:13px;letter-spacing:2px;color:#18764b;font-weight:700}.title{font-size:37px;line-height:1.08;margin:16px 0 12px;font-weight:800}.subtitle{font-size:18px;color:#6e7c83;line-height:1.45}.rule{height:3px;background:#c9f0d7;margin:28px 0}.section{font-size:24px;font-weight:800;margin:28px 0 10px;color:#18764b}.h3{font-size:17px;font-weight:800;margin:20px 0 5px}.body{font-size:15px;line-height:1.55;color:#394852}.chip{display:inline-block;background:#e9f8ee;border:1px solid #bce7c9;color:#18764b;border-radius:16px;padding:5px 10px;font-weight:700;margin:3px 4px 3px 0}.card{border:1px solid #dce4df;border-radius:14px;padding:17px 19px;margin:13px 0;background:#fbfdfc}.card strong{color:#18764b}.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.code{background:#11191f;color:#e8f0f2;border-radius:12px;padding:18px;font:11px/1.48 'DejaVu Sans Mono',monospace;white-space:pre-wrap}.diagram{display:block;max-width:100%;height:635px;object-fit:contain;object-position:center;margin:10px auto}.metric{font-size:28px;font-weight:800;color:#18764b}.small{font-size:12px;color:#6e7c83;line-height:1.45}.footer{position:absolute;left:62px;right:62px;bottom:30px;border-top:1px solid #dce4df;padding-top:10px;font-size:11px;color:#6e7c83;display:flex;justify-content:space-between}.ok{color:#18764b;font-weight:800}.blocked{color:#a34343;font-weight:800}.arrow{font-size:22px;color:#18764b;text-align:center;margin:8px}
+</style></head><body>
+<section class="page"><div class="kicker">PROJECT-ENGINEERING · CHALLENGE 6</div><div class="title">Deletion Consequences</div><div class="subtitle">Choosing safe foreign-key deletion rules for an e-commerce system.</div><div class="rule"></div><div class="body">The design contains customers, orders, and order items. The schema deliberately uses two different deletion strategies based on the business meaning of each relationship.</div><div class="grid" style="margin-top:24px"><div class="card"><div class="metric">RESTRICT</div><div class="h3">Customer → Orders</div><div class="body">Protects financial history from accidental deletion.</div></div><div class="card"><div class="metric">CASCADE</div><div class="h3">Order → Items</div><div class="body">Removes child line items that have no meaning alone.</div></div></div><img class="diagram" src="ERD/corrected_erd.png"><div class="footer"><span>Deletion Consequences</span><span>1 / 5</span></div></section>
+<section class="page"><div class="kicker">IMPLEMENTATION</div><div class="section">PostgreSQL schema</div><div class="body">Each entity has a primary key. The two foreign keys encode the required deletion behavior explicitly.</div><div class="code" style="margin-top:18px">CREATE TABLE customers (
+  customer_id INT PRIMARY KEY,
+  name TEXT NOT NULL,
+  email TEXT NOT NULL UNIQUE
+);
+
+CREATE TABLE orders (
+  order_id INT PRIMARY KEY,
+  customer_id INT NOT NULL,
+  order_date DATE NOT NULL,
+  total DECIMAL(10, 2) NOT NULL CHECK (total &gt;= 0),
+  CONSTRAINT fk_orders_customer
+    FOREIGN KEY (customer_id) REFERENCES customers(customer_id)
+    ON DELETE RESTRICT ON UPDATE CASCADE
+);
+
+CREATE TABLE order_items (
+  item_id INT PRIMARY KEY,
+  order_id INT NOT NULL,
+  product_id INT NOT NULL,
+  quantity INT NOT NULL CHECK (quantity &gt; 0),
+  price DECIMAL(10, 2) NOT NULL CHECK (price &gt;= 0),
+  CONSTRAINT fk_items_order
+    FOREIGN KEY (order_id) REFERENCES orders(order_id)
+    ON DELETE CASCADE ON UPDATE CASCADE
+);</div><div class="section">Indexes</div><div class="body"><span class="chip">idx_orders_customer_id</span><span class="chip">idx_order_items_order_id</span> These support the two relationship lookups without changing deletion semantics.</div><div class="footer"><span>schema.sql · PostgreSQL-compatible</span><span>2 / 5</span></div></section>
+<section class="page"><div class="kicker">BEHAVIOR TEST</div><div class="section">What happens on delete?</div><div class="card"><span class="blocked">Customer 1 → REJECTED</span><div class="body">Alice has orders 101 and 102. Deleting her would destroy transaction history, so the database blocks the operation.</div><div class="code" style="margin-top:10px">DELETE FROM customers WHERE customer_id = 1;
+ERROR: update or delete on table "customers" violates foreign key constraint
+"fk_orders_customer" on table "orders"</div></div><div class="arrow">↓</div><div class="card"><span class="ok">Customer 2 → ACCEPTED</span><div class="body">Bob has no orders, so deleting him does not orphan or erase any business record.</div><div class="code" style="margin-top:10px">DELETE FROM customers WHERE customer_id = 2;
+DELETE 1</div></div><div class="arrow">↓</div><div class="card"><span class="ok">Order 101 → ACCEPTED + CASCADE</span><div class="body">Items 1001 and 1002 are deleted automatically with the order. Order 102 and item 1003 remain.</div><div class="code" style="margin-top:10px">DELETE FROM orders WHERE order_id = 101;
+DELETE 1
+-- order_items for order_id 101: 2 → 0</div></div><div class="footer"><span>Deletion behavior verified with foreign keys enabled</span><span>3 / 5</span></div></section>
+<section class="page"><div class="kicker">DECISION LOGIC</div><div class="section">Why these rules?</div><div class="grid"><div class="card"><div class="metric">1</div><div class="h3">RESTRICT protects records of value</div><div class="body">Orders are financial transactions. They support accounting, refunds, audit trails, retention policies, and customer service. A customer can be archived or anonymized later, but a live order history should not disappear because a parent row was deleted.</div></div><div class="card"><div class="metric">2</div><div class="h3">CASCADE cleans compositional children</div><div class="body">An order item is a component of an order. Without its parent order, the line has no meaningful lifecycle or reporting context. Cascading prevents orphan rows and keeps cancellation or test-data cleanup atomic.</div></div></div><div class="section">Decision rule</div><div class="card"><div class="body"><strong>Use RESTRICT</strong> when deleting the parent could destroy business, legal, or financial history. <strong>Use CASCADE</strong> when the child is wholly owned by the parent and has no independent meaning.</div></div><div class="section">Operational alternative</div><div class="body">Production systems commonly pair RESTRICT with archival or soft deletion. That preserves history while allowing account lifecycle management. The important point is to make the loss decision explicit rather than leaving orphan behavior to chance.</div><div class="footer"><span>Changes.md · business rationale</span><span>4 / 5</span></div></section>
+<section class="page"><div class="kicker">SUBMISSION EVIDENCE</div><div class="section">Verification summary</div><div class="grid"><div class="card"><div class="metric">3</div><div class="body">tables with primary keys</div></div><div class="card"><div class="metric">2</div><div class="body">foreign keys with explicit rules</div></div><div class="card"><div class="metric">1</div><div class="body">customer deletion blocked when history exists</div></div><div class="card"><div class="metric">2</div><div class="body">order items removed by one cascade</div></div></div><div class="section">Reproducible test</div><div class="code">python3 scripts/verify_deletions.py
+
+customer 1 delete: rejected by RESTRICT
+customer 2 delete: accepted because it has no orders
+order 101 delete: accepted; its 2 items removed by CASCADE
+verification passed</div><div class="section">Deliverables</div><div class="body"><span class="chip">schema.sql</span><span class="chip">corrected_erd.png</span><span class="chip">Changes.md</span><span class="chip">verify_deletions.py</span></div><div class="card"><div class="body"><strong>Repository:</strong> public implementation repository<br><strong>Video:</strong> narrated walkthrough with schema and deletion tests</div></div><div class="footer"><span>Deletion Consequences · final PNG submission</span><span>5 / 5</span></div></section>
+</body></html>

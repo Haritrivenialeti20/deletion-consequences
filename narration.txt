@@ -1,0 +1,15 @@
+Welcome to my submission for Deletion Consequences, Challenge 6. The task is to design an e-commerce schema with customers, orders, and order items, then choose two different deletion rules based on the business meaning of each relationship.
+
+The corrected model contains three tables. Customers identify people who place orders. Orders record the transaction, including its customer, date, and total. Order items contain the product, quantity, and price that make up an order. Every table has a primary key, and required values are protected with not-null constraints. Customer email is unique, and non-negative totals, quantities, and prices are enforced with checks.
+
+The first relationship is customers to orders. A customer can have many orders, but order history is a financial and operational record. It can be required for accounting, refunds, audits, legal retention, and customer support. For that reason, orders.customer_id references customers.customer_id with ON DELETE RESTRICT. If a customer still has orders, deleting that customer fails. The safe operational alternative is to archive or anonymize the customer after retention rules allow it.
+
+The second relationship is orders to order items. An order item is a component of its order. Without the parent order, an item has no independent business meaning, so keeping it would create an orphan. For this relationship, order_items.order_id references orders.order_id with ON DELETE CASCADE. When an order is intentionally removed, all of its line items disappear atomically.
+
+The sample data gives Alice two orders and three items. Bob has no orders. The first verification deletes customer 1, Alice, and the database rejects the statement because the RESTRICT foreign key finds dependent orders. The second deletes customer 2, Bob, and the operation succeeds because no child order exists. The third deletes order 101. The order is removed and items 1001 and 1002 are removed automatically. Order 102 and item 1003 remain, demonstrating that the cascade is scoped to the deleted parent.
+
+The ERD labels both deletion behaviors directly on the relationships. The schema also includes indexes on orders.customer_id and order_items.order_id to support the two relationship lookups. These indexes improve access without changing the safety decision encoded by the foreign keys.
+
+The general rule is simple. Use RESTRICT when deleting the parent could destroy business, legal, or financial history. Use CASCADE when the child is wholly owned by the parent and has no meaningful lifecycle outside it. Choosing a deletion rule is not just a technical preference; it is a decision about what data the business can afford to lose.
+
+The verification harness runs with foreign keys enabled and confirms all three behaviors: customer history is protected, an unreferenced customer can be deleted, and order composition is cleaned up automatically. The five PNG submission pages show the corrected ERD, schema code, deletion results, design reasoning, and verification summary. Thank you for reviewing the submission.

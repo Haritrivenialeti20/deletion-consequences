@@ -1,0 +1,21 @@
+erDiagram
+  CUSTOMERS {
+    int customer_id PK
+    text name
+    text email UK
+  }
+  ORDERS {
+    int order_id PK
+    int customer_id FK
+    date order_date
+    decimal total
+  }
+  ORDER_ITEMS {
+    int item_id PK
+    int order_id FK
+    int product_id
+    int quantity
+    decimal price
+  }
+  CUSTOMERS ||--o{ ORDERS : "owns · ON DELETE RESTRICT"
+  ORDERS ||--o{ ORDER_ITEMS : "contains · ON DELETE CASCADE"
