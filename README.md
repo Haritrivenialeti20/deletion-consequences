@@ -24,3 +24,7 @@ python3 scripts/verify_deletions.py
 ```
 
 Expected behavior: deleting customer 1 is rejected, deleting customer 2 succeeds, and deleting order 101 removes its two line items automatically.
+
+## Pull-request verification
+
+The five PNG pages in `docs/submission-pages/` are the upload-ready visual proof requested by Challenge 6. The archive is available at `docs/deletion-consequences-five-page-pngs.zip`.
